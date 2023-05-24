@@ -1,4 +1,0 @@
-ipvar HOME_NET 192.168.4.0/24
-ipvar EXTERNAL_NET !$HOME_NET
-
-alert icmp $EXTERNAL_NET any -> $HOME_NET any (msg:"ICMP test"; GID:1; sid:1000001; rev:001;)
