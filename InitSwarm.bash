@@ -8,12 +8,12 @@
 ipv4_master="`hostname -I | awk '{print $1}'`"
 
 #	File var shared with other file(s)
-config="./honeypot.conf"
+config_file="./honeypot.conf"
 
 #	Service
-service_name="honeypot"
-task_num="`grep -i ":y" honeypot.conf | wc -l`"
-image="busybox"
+services_name="honeypots"
+#replicas="`grep -i ":y" honeypot.conf | wc -l`"
+#image="busybox"
 
 #	Colors table
 # Reset
@@ -47,33 +47,48 @@ function InitSwarm {
 	$command
 }
 
-function CreateServiceAndExceptionHandling {
-	has_exist=`docker service ls --filter name=$service_name --format "{{.Name}}"`
+function CreateServiceExceptionHandle {
+	service_name=$1
+	create_service_command_str=$2
+	
+	has_exist=`sudo docker service ls --filter name=$service_name --format "{{.Name}}"`
 	if [ "$has_exist" == "$service_name" ]
 	then
 		echo -e "${BCyan}[i] ${Cyan}Service ${service_name} already exists.${Color_Off}\n"
 	else
-		$1
+		$create_service_command_str
 	fi
 }
 
 function CreateService {
+	service_name="$1"
+	replicas="$2"
+	image="$3"
+	image_tag="$4"
+	
 	echo -e "${BGreen}[+] ${BYellow}Service $service_name is being created.. ----------------------------------------------------${Color_Off}"
-	
-	create_service_command_str="docker service create \
+	create_service_command_str="sudo docker service create \
 											--name $service_name \
-											--replicas $task_num \
-											-t $image
-										"
-	
-	CreateServiceAndExceptionHandling "$create_service_command_str"
-	
-	echo -e "${BGreen}[✔] ${Green}Service ${service_name} is created successfully.${Color_Off}\n"
+											--replicas $replicas \
+											-t $image:$image_tag"
+	CreateServiceExceptionHandle "$service_name" "$create_service_command_str"
+	#echo -e "${BGreen}[✔] ${Green}Service ${service_name} is created successfully.${Color_Off}\n"
 }
 
-
-
-
+function CreateServices {
+	while IFS= read -r line
+	do
+		is_y="$(echo "$line" | cut -d ":" -f 5)"
+  		if [ "$is_y" == "y" ] || [ "$is_y" == "Y" ]
+  		then
+  			service_name="$(echo "$line" | cut -d ":" -f 1)"
+  			replicas="$(echo "$line" | cut -d ":" -f 2)"
+  			image="$(echo "$line" | cut -d ":" -f 3)"
+  			image_tag="$(echo "$line" | cut -d ":" -f 4)"
+  			CreateService "$service_name" "$replicas" "$image" "$image_tag"
+  		fi
+	done < "$config_file"
+}
 
 
 
@@ -86,14 +101,12 @@ function CreateService {
 #**************************************************************************************************
 #**************************************************************************************************
 
+sudo -S echo -e "\n" <<< "1"  
+
 # Init docker swarm
 InitSwarm
 
-# Drain Master node
-echo -e "${BGreen}[+] ${BYellow}Draining all manager role node.. ----------------------------------------------------${Color_Off}"
-docker node update --availability drain `docker node ls --filter "role=manager" -q`
-
 # Create service
-CreateService
+CreateServices
 
 
